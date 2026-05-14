@@ -1,7 +1,9 @@
 import std/[os, strutils]
 
---mm:atomicArc
---threads:on
+--mm:
+  atomicArc
+--threads:
+  on
 
 proc requiredExe(bin: string): string =
   result = findExe(bin)
@@ -47,8 +49,8 @@ proc startPostgres(pgCtl, pgData, pgHost, pgPort, pgLog: string) =
 
   let command =
     pgCtl & " -D " & quoteShell(pgData) & " -o " &
-      quoteShell("-h " & pgHost & " -p " & pgPort & " -k " & pgSocketDir) &
-      " -l " & quoteShell(pgLog) & " start -w"
+    quoteShell("-h " & pgHost & " -p " & pgPort & " -k " & pgSocketDir) & " -l " &
+    quoteShell(pgLog) & " start -w"
   exec(command)
 
 task test, "run unit tests":
@@ -114,7 +116,10 @@ task testPostgres, "start PostgreSQL and run unit plus integration tests":
       "SQUEAL_BENCH_ROWS=" & quoteShell(getEnv("SQUEAL_BENCH_ROWS", "10000")) &
       " SQUEAL_BENCH_ITERS=" & quoteShell(getEnv("SQUEAL_BENCH_ITERS", "100"))
 
-    compileAndRunWithLibPath("tests/integration/tpostgres_binary.nim", pgLibDir)
+    for testFile in listFiles("tests/integration/"):
+      if testFile.endsWith(".nim") and testFile.splitFile().name.startsWith("t"):
+        compileAndRunWithLibPath(testFile, pgLibDir)
+
     compileAndRunWithLibPath(
       "tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv
     )

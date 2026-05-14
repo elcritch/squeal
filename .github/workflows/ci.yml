@@ -31,8 +31,9 @@ jobs:
             ${{ runner.os }}-atlas-
 
       - run: echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-      - run: curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | bash -
+      - run: cd /tmp && nimble install "https://github.com/nim-lang/atlas@#head"
       - run: atlas -v
+      - run: atlas init
       - run: atlas install
       - run: nim test
       - run: nim testPostgres
