@@ -105,6 +105,12 @@ proc printResult(result: BenchResult) =
   echo "  elapsed:   ", formatFloat(result.elapsedMs, ffDecimal, 3), " ms"
   echo "  rows/sec:  ", formatFloat(rowsPerSec, ffDecimal, 0)
 
+proc throughput(bench: BenchResult): float =
+  if bench.elapsedMs == 0.0:
+    0.0
+  else:
+    float(bench.rows) / (bench.elapsedMs / 1000.0)
+
 when isMainModule:
   let
     rowCount = envInt("SQUEAL_BENCH_ROWS", 10_000)
@@ -127,5 +133,13 @@ when isMainModule:
 
     if dbConnector.checksum != squeal.checksum:
       quit("benchmark checksum mismatch", 1)
+
+    let ratio =
+      if dbConnector.elapsedMs == 0.0:
+        0.0
+      else:
+        throughput(squeal) / throughput(dbConnector)
+    echo ""
+    echo "squeal/db_connector throughput ratio: ", formatFloat(ratio, ffDecimal, 2), "x"
   finally:
     db.close()
