@@ -40,6 +40,22 @@ proc prependEnvPath(key, value: string) =
   else:
     putEnv(key, value & PathSep & current)
 
+proc startPostgres(pgCtl, pgData, pgHost, pgPort, pgLog: string) =
+  let pgSocketDir = getCurrentDir() / pgData / "socket"
+  if not dirExists(pgSocketDir):
+    mkDir(pgSocketDir)
+
+  let command =
+    pgCtl & " -D " & quoteShell(pgData) & " -o " &
+      quoteShell("-h " & pgHost & " -p " & pgPort & " -k " & pgSocketDir) &
+      " -l " & quoteShell(pgLog) & " start -w"
+  let (_, statusCode) = gorgeEx(command)
+  if statusCode != 0:
+    if fileExists(pgLog):
+      let (logOutput, _) = gorgeEx("cat " & quoteShell(pgLog))
+      echo logOutput
+    raise newException(OSError, "FAILED: " & command)
+
 task test, "run unit tests":
   for testFile in listFiles("tests/"):
     if testFile.endsWith(".nim") and testFile.splitFile().name.startsWith("t"):
@@ -79,11 +95,7 @@ task testPostgres, "start PostgreSQL and run unit plus integration tests":
   let startedByTask = statusCode != 0
 
   if startedByTask:
-    exec(
-      pgCtl & " -D " & quoteShell(pgData) & " -o " &
-        quoteShell("-h " & pgHost & " -p " & pgPort) & " -l " & quoteShell(pgLog) &
-        " start -w"
-    )
+    startPostgres(pgCtl, pgData, pgHost, pgPort, pgLog)
 
   try:
     let connArgs =
@@ -149,11 +161,7 @@ task benchmarkPostgres, "start PostgreSQL and run benchmark only":
   let startedByTask = statusCode != 0
 
   if startedByTask:
-    exec(
-      pgCtl & " -D " & quoteShell(pgData) & " -o " &
-        quoteShell("-h " & pgHost & " -p " & pgPort) & " -l " & quoteShell(pgLog) &
-        " start -w"
-    )
+    startPostgres(pgCtl, pgData, pgHost, pgPort, pgLog)
 
   try:
     let connArgs =
