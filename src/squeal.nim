@@ -38,6 +38,7 @@ type
     lengths: seq[int32]
     formats: seq[int32]
     storage: seq[string]
+    nulls: seq[bool]
 
 const
   pgObjectMappingMode* = MSGPACK_OBJ_TO_MAP
@@ -251,9 +252,10 @@ proc pgDecode*[T](typ: typedesc[Option[T]], value: PgValue): Option[T] =
 proc addBinaryParam(params: var PgParamSet, oid: Oid, data: string) =
   params.oids.add(oid)
   params.storage.add(data)
-  params.values.add(params.storage[^1].cstring)
+  params.values.add(nil)
   params.lengths.add(int32(data.len))
   params.formats.add(int32(pgBinary))
+  params.nulls.add(false)
 
 proc addNullParam(params: var PgParamSet, oid: Oid) =
   params.oids.add(oid)
@@ -261,6 +263,7 @@ proc addNullParam(params: var PgParamSet, oid: Oid) =
   params.values.add(nil)
   params.lengths.add(0)
   params.formats.add(int32(pgBinary))
+  params.nulls.add(true)
 
 proc addParam[T](params: var PgParamSet, value: Option[T]) =
   if value.isSome:
@@ -304,9 +307,18 @@ proc intPtr(values: var seq[int32]): ptr int32 =
   else:
     addr values[0]
 
+proc refreshValuePtrs(params: var PgParamSet) =
+  for i in 0 ..< params.values.len:
+    params.values[i] =
+      if params.nulls[i]:
+        nil
+      else:
+        params.storage[i].cstring
+
 proc execParams(
     db: DbConn, query: SqlQuery, params: var PgParamSet, resultFormat: PgFormat
 ): PPGresult =
+  params.refreshValuePtrs()
   pqexecParams(
     db,
     query.cstring,
@@ -372,6 +384,7 @@ template execBinary*(db: DbConn, query: SqlQuery, args: varargs[untyped]) =
     execBinaryParams(db, query, params)
 
 proc setupSingleBinaryQuery(db: DbConn, query: SqlQuery, params: var PgParamSet) =
+  params.refreshValuePtrs()
   if pqsendQueryParams(
     db,
     query.cstring,

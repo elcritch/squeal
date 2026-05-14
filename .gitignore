@@ -15,10 +15,10 @@ nimcache/
 *.out
 *.dSYM/
 tests/output/
+tests/postgrescache/
 
 # Editor, OS, and tool noise.
 .DS_Store
 .tool-versions
 .env
 .env.*
-
