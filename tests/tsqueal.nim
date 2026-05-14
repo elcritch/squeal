@@ -1,8 +1,8 @@
 import std/unittest
 
-import nim_repo
+import squeal
 
-suite "nim_repo":
+suite "squeal":
   test "greets by name":
     check greet("Nim") == "hello, Nim"
 
