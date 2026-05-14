@@ -8,3 +8,6 @@ requires "nim >= 2.0.0"
 
 requires "https://github.com/nim-lang/db_connector"
 
+feature "dev":
+  requires "ormin"
+
