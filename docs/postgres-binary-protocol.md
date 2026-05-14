@@ -31,6 +31,31 @@ Current `db_connector/db_postgres.nim` behavior is string-first:
 
 The missing piece is a typed codec layer above libpq.
 
+## Implementation Status
+
+The first Squeal implementation is in `src/squeal.nim` and deliberately builds
+on `deps/db_connector` instead of replacing it:
+
+- Re-exports `db_connector/db_common`, `db_connector/db_postgres`, and the
+  libpq bindings from `db_connector/postgres`.
+- Uses `DbConn`, `SqlQuery`, `Row`, `Oid`, `PPGresult`, and libpq's
+  `PQexecParams` / `PQsendQueryParams` bindings from `db_connector`.
+- Adds Squeal-owned `PgInstantRow` for raw binary access. The existing
+  `db_connector/db_postgres.InstantRow` cannot be extended from outside the
+  module because its `PGresult` field is private.
+- Uses PostgreSQL-native `$1`, `$2`, ... placeholders for binary parameter
+  APIs. The text-oriented `?` substitution path remains part of the existing
+  `db_connector` API.
+- Provides scalar codecs for `bool`, `int16`, `int32`, `int64`, `int`,
+  `float32`, `float64`, `string`, `seq[byte]`, `Option[T]`, and explicit
+  `pgNull(T)` parameters.
+- Provides raw and typed APIs: `execBinary`, `getAllBinaryRows`,
+  `fastBinaryRows`, `instantBinaryRows`, `PgInstantRow.rawValue`, `row.get`,
+  `decodeObject`, `rows[T]`, and `getAll[T]`.
+- Object decoding follows the `msgpack4nim` style of compile-time field
+  walking with `fieldPairs`, using result column names that match object field
+  names.
+
 References:
 
 - PostgreSQL protocol overview: <https://www.postgresql.org/docs/current/protocol-overview.html>
