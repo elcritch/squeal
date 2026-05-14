@@ -1,9 +1,6 @@
 import std/[os, strutils]
 
---mm:
-  atomicArc
---threads:
-  on
+--threads:on
 
 proc requiredExe(bin: string): string =
   result = findExe(bin)
