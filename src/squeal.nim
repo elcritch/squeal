@@ -5,8 +5,6 @@
 
 import std/[macros, options]
 
-import msgpack4nim
-
 import db_connector/db_common as dbcommon
 import db_connector/db_postgres as pgdb
 import db_connector/postgres
@@ -41,8 +39,6 @@ type
     nulls: seq[bool]
 
 const
-  pgObjectMappingMode* = MSGPACK_OBJ_TO_MAP
-
   pgBoolOid* = Oid(16)
   pgByteaOid* = Oid(17)
   pgInt8Oid* = Oid(20)

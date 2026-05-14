@@ -2,7 +2,6 @@ import std/[os, strutils]
 
 --mm:atomicArc
 --threads:on
---path:"deps/msgpack4nim/src"
 
 proc requiredExe(bin: string): string =
   result = findExe(bin)
