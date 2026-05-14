@@ -1,6 +1,6 @@
 # squeal
 
-Squeal is an experimental PostgreSQL binary query layer for Nim. It builds on
+Squeal is a PostgreSQL binary query layer for Nim. It builds on
 `db_connector/db_postgres` and `libpq`, then adds explicit binary parameters,
 binary result decoding, and typed row mapping.
 
