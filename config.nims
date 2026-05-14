@@ -49,12 +49,7 @@ proc startPostgres(pgCtl, pgData, pgHost, pgPort, pgLog: string) =
     pgCtl & " -D " & quoteShell(pgData) & " -o " &
       quoteShell("-h " & pgHost & " -p " & pgPort & " -k " & pgSocketDir) &
       " -l " & quoteShell(pgLog) & " start -w"
-  let (_, statusCode) = gorgeEx(command)
-  if statusCode != 0:
-    if fileExists(pgLog):
-      let (logOutput, _) = gorgeEx("cat " & quoteShell(pgLog))
-      echo logOutput
-    raise newException(OSError, "FAILED: " & command)
+  exec(command)
 
 task test, "run unit tests":
   for testFile in listFiles("tests/"):
