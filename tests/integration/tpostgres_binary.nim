@@ -44,6 +44,7 @@ proc execSql(db: DbConn, query: string) =
   db.exec(SqlQuery(query))
 
 proc resetSchema(db: DbConn) =
+  db.execSql("set client_min_messages = warning")
   db.execSql("drop table if exists session cascade")
   db.execSql("drop table if exists post cascade")
   db.execSql("drop table if exists person cascade")

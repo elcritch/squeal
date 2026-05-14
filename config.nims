@@ -12,11 +12,12 @@ proc requiredExe(bin: string): string =
 proc runTestFile(testFile: string) =
   exec("nim c -r " & quoteShell(testFile))
 
-proc compileAndRunWithLibPath(testFile, libPath: string) =
+proc compileAndRunWithLibPath(testFile, libPath: string, extraEnv = "") =
   exec("nim c " & quoteShell(testFile))
   let bin = testFile.changeFileExt("")
   exec(
-    "env DYLD_LIBRARY_PATH=" & quoteShell(libPath) &
+    "env " & extraEnv &
+      " DYLD_LIBRARY_PATH=" & quoteShell(libPath) &
       " DYLD_FALLBACK_LIBRARY_PATH=" & quoteShell(libPath) &
       " LD_LIBRARY_PATH=" & quoteShell(libPath) &
       " " & quoteShell(bin)
@@ -93,7 +94,12 @@ task testPostgres, "start PostgreSQL and run unit plus integration tests":
       if testFile.endsWith(".nim") and testFile.splitFile().name.startsWith("t"):
         runTestFile(testFile)
 
+    let benchEnv =
+      "SQUEAL_BENCH_ROWS=" & quoteShell(getEnv("SQUEAL_BENCH_ROWS", "10000")) &
+      " SQUEAL_BENCH_ITERS=" & quoteShell(getEnv("SQUEAL_BENCH_ITERS", "100"))
+
     compileAndRunWithLibPath("tests/integration/tpostgres_binary.nim", pgLibDir)
+    compileAndRunWithLibPath("tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv)
   finally:
     if startedByTask:
       exec(pgCtl & " -D " & quoteShell(pgData) & " stop -m fast -w")
