@@ -15,11 +15,30 @@ type
     views: int32
     active: bool
 
+  ThreadName = object
+    id: int64
+    name: string
+
+  ThreadCount = object
+    thread: int64
+    count: int64
+
   PersonStatus = object
     name: string
     email: string
     status: string
     ban: string
+
+  SessionUser = object
+    userid: int64
+
+  AntibotComputed = object
+    doubled: string
+    marker: int32
+
+  AuthorName = object
+    author: int64
+    name: string
 
   OptionalText = object
     value: Option[string]
@@ -42,6 +61,43 @@ proc openTestDb(): DbConn =
 
 proc execSql(db: DbConn, query: string) =
   db.exec(SqlQuery(query))
+
+proc seedForum(db: DbConn): tuple[threadId, personId, postId: int64] =
+  result.threadId =
+    getAll[IdRow](
+      db,
+      sql"insert into thread(name, views) values ($1, $2) returning id",
+      "first thread",
+      int32(0),
+    )[0].id
+
+  result.personId =
+    getAll[IdRow](
+      db,
+      sql"""
+        insert into person(name, password, email, salt, status)
+        values ($1, $2, $3, $4, $5) returning id
+      """,
+      "me",
+      "mypw",
+      "some@body.com",
+      "pepper",
+      "EmailUnconfirmed",
+    )[0].id
+
+  result.postId =
+    getAll[IdRow](
+      db,
+      sql"""
+        insert into post(author, ip, header, content, thread)
+        values ($1, $2::inet, $3, $4, $5) returning id
+      """,
+      result.personId,
+      "127.0.0.1",
+      "hello",
+      "content",
+      result.threadId,
+    )[0].id
 
 proc resetSchema(db: DbConn) =
   db.execSql("set client_min_messages = warning")
@@ -140,41 +196,7 @@ suite "squeal PostgreSQL binary integration":
       db.close()
 
   test "runs Ormin-style basic SQL checks through binary params and rows":
-    let threadId =
-      getAll[IdRow](
-        db,
-        sql"insert into thread(name, views) values ($1, $2) returning id",
-        "first thread",
-        int32(0),
-      )[0].id
-
-    let personId =
-      getAll[IdRow](
-        db,
-        sql"""
-          insert into person(name, password, email, salt, status)
-          values ($1, $2, $3, $4, $5) returning id
-        """,
-        "me",
-        "mypw",
-        "some@body.com",
-        "pepper",
-        "EmailUnconfirmed",
-      )[0].id
-
-    let postId =
-      getAll[IdRow](
-        db,
-        sql"""
-          insert into post(author, ip, header, content, thread)
-          values ($1, $2::inet, $3, $4, $5) returning id
-        """,
-        personId,
-        "127.0.0.1",
-        "hello",
-        "content",
-        threadId,
-      )[0].id
+    let (threadId, personId, postId) = seedForum(db)
 
     check postId > 0
 
@@ -273,3 +295,151 @@ suite "squeal PostgreSQL binary integration":
       db, sql"insert into artifact(payload) values ($1) returning id", payload
     )
     check getAll[BlobRow](db, sql"select payload from artifact")[0].payload == payload
+
+  test "covers Ormin-style ordering, limits, empty results, and expressions":
+    let (threadId, personId, _) = seedForum(db)
+    let secondThread =
+      getAll[IdRow](
+        db,
+        sql"insert into thread(name, views) values ($1, $2) returning id",
+        "second thread",
+        int32(2),
+      )[0].id
+    let thirdThread =
+      getAll[IdRow](
+        db,
+        sql"insert into thread(name, views) values ($1, $2) returning id",
+        "third thread",
+        int32(3),
+      )[0].id
+
+    let paged = getAll[ThreadName](
+      db,
+      sql"""
+        select id, name
+        from thread
+        where id in (
+          select thread from post
+          where author in (
+            select id from person
+            where status not in ($1) or id = $2
+          )
+          union all
+          select id from thread where id in ($3, $4)
+        )
+        order by id desc
+        limit $5
+        offset $6
+      """,
+      "Spammer",
+      personId,
+      secondThread,
+      thirdThread,
+      int64(2),
+      int64(1),
+    )
+    check paged ==
+      @[
+        ThreadName(id: secondThread, name: "second thread"),
+        ThreadName(id: threadId, name: "first thread"),
+      ]
+
+    check getAll[IdRow](db, sql"select id from thread where id = $1", int64(-1)).len == 0
+
+    db.execBinary(
+      sql"insert into antibot(ip, answer) values ($1::inet, $2)", "127.0.0.2", "dunno"
+    )
+    db.execBinary(
+      sql"insert into antibot(ip, answer) values ($1::inet, $2)", "127.0.0.3", "things"
+    )
+    let computed = getAll[AntibotComputed](
+      db,
+      sql"""
+        select answer || answer as doubled,
+               (case when host(ip) = $1 then 0 else 1 end)::int4 as marker
+        from antibot
+        where answer like $2
+        order by ip desc
+        limit 1
+      """,
+      "hi",
+      "%things%",
+    )
+    check computed == @[AntibotComputed(doubled: "thingsthings", marker: 1)]
+
+  test "covers Ormin-style sessions, joins, grouped counts, and cleanup":
+    let (threadId, personId, _) = seedForum(db)
+    let orphanThread =
+      getAll[IdRow](
+        db,
+        sql"insert into thread(name, views) values ($1, $2) returning id",
+        "orphan",
+        int32(0),
+      )[0].id
+
+    db.execBinary(
+      sql"insert into session(ip, password, userid) values ($1::inet, $2, $3)",
+      "127.0.0.1",
+      "mypw",
+      personId,
+    )
+    let sessionUsers = getAll[SessionUser](
+      db,
+      sql"select userid from session where ip = $1::inet and password = $2",
+      "127.0.0.1",
+      "mypw",
+    )
+    check sessionUsers == @[SessionUser(userid: personId)]
+
+    db.execBinary(
+      sql"update session set lastModified = now() where ip = $1::inet and password = $2",
+      "127.0.0.1",
+      "mypw",
+    )
+    check getAll[CountRow](
+      db, sql"select count(*)::int8 as count from session where userid = $1", personId
+    )[0].count == 1
+
+    let joined = getAll[AuthorName](
+      db,
+      sql"""
+        select p.author, u.name
+        from post p
+        join person u on p.author = u.id
+        where p.thread = $1
+        limit 1
+      """,
+      threadId,
+    )
+    check joined == @[AuthorName(author: personId, name: "me")]
+
+    let grouped = getAll[ThreadCount](
+      db,
+      sql"""
+        select thread, count(*)::int8 as count
+        from post
+        group by thread
+        having count(*) > 0
+        order by thread
+      """,
+    )
+    check grouped == @[ThreadCount(thread: threadId, count: 1)]
+
+    check getAll[CountRow](
+      db,
+      sql"""
+        select count(*)::int8 as count
+        from thread
+        where id in (
+          select thread from post
+          where author = $1
+            and post.id in (select min(id) from post group by thread)
+        )
+      """,
+      personId,
+    )[0].count == 1
+
+    db.execBinary(sql"delete from thread where id not in (select thread from post)")
+    check getAll[IdRow](db, sql"select id from thread where id = $1", orphanThread).len ==
+      0
+    check getAll[IdRow](db, sql"select id from thread where id = $1", threadId).len == 1
