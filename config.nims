@@ -1,5 +1,6 @@
 import std/[os, strutils]
 
+--define:"useMalloc"
 --threads:on
 
 proc requiredExe(bin: string): string =
@@ -23,13 +24,33 @@ proc pgExe(pgConfig, bin: string): string =
 proc runTestFile(testFile: string) =
   exec("nim c -r " & quoteShell(testFile))
 
-proc compileAndRunWithLibPath(testFile, libPath: string, extraEnv = "") =
-  exec("nim c " & quoteShell(testFile))
+proc compileAndRunWithLibPath(
+    testFile, libPath: string, extraEnv = "", extraNimFlags = ""
+) =
+  let flags =
+    if extraNimFlags.len == 0:
+      ""
+    else:
+      extraNimFlags & " "
+  exec("nim c " & flags & quoteShell(testFile))
   let bin = testFile.changeFileExt("")
   exec(
     "env " & extraEnv & " DYLD_LIBRARY_PATH=" & quoteShell(libPath) &
       " DYLD_FALLBACK_LIBRARY_PATH=" & quoteShell(libPath) & " LD_LIBRARY_PATH=" &
       quoteShell(libPath) & " " & quoteShell(bin)
+  )
+
+proc runThreadSanitizerTest(testFile, libPath: string) =
+  if getEnv("SQUEAL_TSAN", "1") in ["0", "false", "False", "FALSE"]:
+    echo "Skipping ThreadSanitizer run for " & testFile & " because SQUEAL_TSAN=0"
+    return
+
+  echo "Running ThreadSanitizer for " & testFile
+  compileAndRunWithLibPath(
+    testFile,
+    libPath,
+    "TSAN_OPTIONS=" & quoteShell(getEnv("TSAN_OPTIONS", "halt_on_error=1")),
+    "--passC:-fsanitize=thread --passL:-fsanitize=thread",
   )
 
 proc prependEnvPath(key, value: string) =
@@ -116,6 +137,8 @@ task testPostgres, "start PostgreSQL and run unit plus integration tests":
     for testFile in listFiles("tests/integration/"):
       if testFile.endsWith(".nim") and testFile.splitFile().name.startsWith("t"):
         compileAndRunWithLibPath(testFile, pgLibDir)
+
+    runThreadSanitizerTest("tests/integration/tpostgres_threads.nim", pgLibDir)
 
     compileAndRunWithLibPath(
       "tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv
