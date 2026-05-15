@@ -1,7 +1,10 @@
 import std/[os, strutils]
 
---define:"useMalloc"
---threads:on
+--mm:arc
+--define:
+  "useMalloc"
+--threads:
+  off
 
 proc requiredExe(bin: string): string =
   result = findExe(bin)
@@ -52,6 +55,9 @@ proc runThreadSanitizerTest(testFile, libPath: string) =
     "TSAN_OPTIONS=" & quoteShell(getEnv("TSAN_OPTIONS", "halt_on_error=1")),
     "--passC:-fsanitize=thread --passL:-fsanitize=thread",
   )
+
+proc runReleaseBenchmark(testFile, libPath, extraEnv: string) =
+  compileAndRunWithLibPath(testFile, libPath, extraEnv, "-d:release")
 
 proc prependEnvPath(key, value: string) =
   let current = getEnv(key)
@@ -131,8 +137,8 @@ task testPostgres, "start PostgreSQL and run unit plus integration tests":
         runTestFile(testFile)
 
     let benchEnv =
-      "SQUEAL_BENCH_ROWS=" & quoteShell(getEnv("SQUEAL_BENCH_ROWS", "10000")) &
-      " SQUEAL_BENCH_ITERS=" & quoteShell(getEnv("SQUEAL_BENCH_ITERS", "100"))
+      "SQUEAL_BENCH_ROWS=" & quoteShell(getEnv("SQUEAL_BENCH_ROWS", "40000")) &
+      " SQUEAL_BENCH_ITERS=" & quoteShell(getEnv("SQUEAL_BENCH_ITERS", "200"))
 
     for testFile in listFiles("tests/integration/"):
       if testFile.endsWith(".nim") and testFile.splitFile().name.startsWith("t"):
@@ -140,9 +146,7 @@ task testPostgres, "start PostgreSQL and run unit plus integration tests":
 
     runThreadSanitizerTest("tests/integration/tpostgres_threads.nim", pgLibDir)
 
-    compileAndRunWithLibPath(
-      "tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv
-    )
+    runReleaseBenchmark("tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv)
   finally:
     if startedByTask:
       exec(pgCtl & " -D " & quoteShell(pgData) & " stop -m fast -w")
@@ -196,12 +200,10 @@ task benchmarkPostgres, "start PostgreSQL and run benchmark only":
       " SQUEAL_PG_USER=" & quoteShell(pgUser) & " SQUEAL_PG_PASSWORD=" &
       quoteShell(getEnv("SQUEAL_PG_PASSWORD", "")) & " SQUEAL_PG_DATABASE=" &
       quoteShell(pgDatabase) & " SQUEAL_BENCH_ROWS=" &
-      quoteShell(getEnv("SQUEAL_BENCH_ROWS", "10000")) & " SQUEAL_BENCH_ITERS=" &
-      quoteShell(getEnv("SQUEAL_BENCH_ITERS", "100"))
+      quoteShell(getEnv("SQUEAL_BENCH_ROWS", "40000")) & " SQUEAL_BENCH_ITERS=" &
+      quoteShell(getEnv("SQUEAL_BENCH_ITERS", "200"))
 
-    compileAndRunWithLibPath(
-      "tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv
-    )
+    runReleaseBenchmark("tests/integration/bpostgres_binary.nim", pgLibDir, benchEnv)
   finally:
     if startedByTask:
       exec(pgCtl & " -D " & quoteShell(pgData) & " stop -m fast -w")

@@ -4,17 +4,18 @@ Squeal is a PostgreSQL binary query layer for Nim. It builds on
 `db_connector/db_postgres` and `libpq`, then adds explicit binary parameters,
 binary result decoding, and typed row mapping.
 
-Current benchmark from `nim testPostgres` on a local PostgreSQL instance:
+Current benchmark from `nim benchmarkPostgres` on a local PostgreSQL instance:
 
-```text
-db_connector text Row:  ~1.1M rows/sec
-squeal binary typed:    ~1.7M rows/sec
-ratio:                  ~1.5x
-```
+| Benchmark | Elapsed ms | Rows/sec | Relative |
+|---|---:|---:|---:|
+| `squeal binary typed` | 5192.902 | 1,540,564 | `1.26x` vs Python |
+| `db_connector text Row` | 5966.476 | 1,340,825 | `1.00x` baseline |
+| `python psycopg sync tuple` | 6528.315 | 1,225,431 | `0.91x` vs `db_connector` |
 
-Treat this as a directional benchmark, not a universal result. It fetches
-1,000,000 simple rows (`int8`, `text`, `bool`) and compares `db_connector`
-text rows with Squeal binary typed rows.
+Treat this as a directional benchmark, not a universal result. The current
+default benchmark fetches `40,000 x 200` rows from a 9-column mixed schema
+(`int8`, `text`, `bool`, `int4`, `int2`, `float8`, `float4`, `text`, `int8`)
+and compares `db_connector`, Squeal, and synchronous Python `psycopg`.
 
 ## Requirements
 
@@ -288,5 +289,5 @@ Useful environment variables:
 - `SQUEAL_PG_PORT`: default `55432`.
 - `SQUEAL_PG_USER`: default `$USER`.
 - `SQUEAL_PG_DATABASE`: default depends on the task.
-- `SQUEAL_BENCH_ROWS`: default `10000`.
-- `SQUEAL_BENCH_ITERS`: default `100`.
+- `SQUEAL_BENCH_ROWS`: default `40000`.
+- `SQUEAL_BENCH_ITERS`: default `200`.
