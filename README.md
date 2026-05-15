@@ -6,11 +6,11 @@ binary result decoding, and typed row mapping.
 
 Current benchmark from `nim benchmarkPostgres` on a local PostgreSQL instance:
 
-| Benchmark | Elapsed ms | Rows/sec | Relative |
-|---|---:|---:|---:|
-| `squeal binary typed` | 5192.902 | 1,540,564 | `1.26x` vs Python |
-| `db_connector text Row` | 5966.476 | 1,340,825 | `1.00x` baseline |
-| `python psycopg sync tuple` | 6528.315 | 1,225,431 | `0.91x` vs `db_connector` |
+| Benchmark | Elapsed ms | Rows/sec | vs `db_connector` | vs Python |
+|---|---:|---:|---:|---:|
+| `squeal binary typed` | 5192.902 | 1,540,564 | `1.15x` | `1.26x` |
+| `db_connector text Row` | 5966.476 | 1,340,825 | `1.00x` | `1.09x` |
+| `python psycopg sync tuple` | 6528.315 | 1,225,431 | `0.91x` | `1.00x` |
 
 Treat this as a directional benchmark, not a universal result. The current
 default benchmark fetches `40,000 x 200` rows from a 9-column mixed schema
